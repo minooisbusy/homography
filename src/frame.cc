@@ -26,4 +26,21 @@ std::tuple<Mat, Mat> FramePair::get()
 {
     return {src1.clone(), src2.clone()};
 }
+
+void FramePair::compute()
+{
+    // Compute feature pairs (Library)
+    Ptr<cv::xfeatures2d::SIFT> detector = cv::xfeatures2d::SIFT::create();
+    Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::BRUTEFORCE);
+    detector->detectAndCompute(src1,cv::noArray(),kpts1, dscpt1);
+    detector->detectAndCompute(src2,cv::noArray(),kpts2, dscpt2);
+    matcher->match(dscpt1,dscpt2,matches);
+
+
+    //std::cout<<"-----------"<<std::endl;
+    //std::cout<<matches[i].imgIdx<<std::endl; // Don't care
+    //std::cout<<matches[i].queryIdx<<std::endl; // src1 kpt index
+    //std::cout<<matches[i].trainIdx<<std::endl; // src2 kpt index
+    //std::cout<<matches[i].distance<<std::endl; // matching cost(low value is better)
+}
 }
