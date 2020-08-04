@@ -8,6 +8,7 @@
 #include<tuple>
 #include<assert.h>
 #include<iostream>
+#include<cstdlib>
 using namespace cv;
 namespace FRAME
 {
@@ -22,6 +23,8 @@ Mat dscpt1;
 Mat dscpt2;
 std::vector<cv::DMatch> matches;
 
+std::vector<std::array<int,4>> indice;
+
 public:
 FramePair(std::string, std::string);
 std::tuple<Mat, Mat> get();
@@ -29,7 +32,10 @@ std::tuple<Mat, Mat> get();
 void showPairs();
 void compute();
 void ransac(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>, std::vector<cv::DMatch>);
-void homography();
+void homography(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>);
+std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> sampling(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>, std::vector<cv::DMatch>);
+std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> conditioning(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>);
+
 
 };
 }
