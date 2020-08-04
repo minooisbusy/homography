@@ -161,4 +161,23 @@ std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> FramePair::samp
     
     return {key1, key2};
 }
+std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> conditioning(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint>kpts2)
+{
+    Mat T1 = Mat::zeros(3,3,CV_32F);
+    Mat T2 = Mat::zeros(3,3,CV_32F);
+    Point2f center1(0,0);
+    Point2f center2(0,0);
+    for(int i=0; i<kpts1.size(); i++)
+    {
+        center1 +=kpts1[i].pt;
+        center2 +=kpts2[i].pt;
+    }
+    center1 /=(float)kpts1.size();
+    center2 /=(float)kpts2.size();
+    T1.at<float>(0,2)=-center1.x;
+    T1.at<float>(1,2)=-center1.y;
+
+    T2.at<float>(0,2)=-center2.x;
+    T2.at<float>(1,2)=-center2.y;
+}
 }
