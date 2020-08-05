@@ -18,9 +18,22 @@ void FramePair::showPairs()
 {
     Mat showImg;
     hconcat(src1, src2,showImg);
-    resize(showImg,showImg, Size(640*2, 480));
     
     imshow("Original scene Show", showImg);
+    waitKey(0);
+}
+
+void FramePair::showResult(Mat src, Mat tgt)
+{
+    Mat bgr[3]={Mat::zeros(480,640, CV_8UC1)};
+    bgr[0] = src.clone();
+    bgr[1] = Mat::zeros(480,640, CV_8UC1);
+    bgr[2] = tgt.clone();
+    Mat mg=Mat::zeros(640,480,CV_8UC3);;
+    cv::merge(bgr,3, mg);
+    imshow("warped image residual", mg);
+    imshow("original", bgr[0]);
+    imshow("warpped", bgr[2]);
     waitKey(0);
 }
 
@@ -38,25 +51,55 @@ void FramePair::compute()
     detector->detectAndCompute(src2,cv::noArray(),kpts2, dscpt2);
     matcher->match(dscpt1,dscpt2,matches);
 
-    std::vector<cv::KeyPoint> src_sample, dst_sample;
-    std::tie(src_sample, dst_sample) = sampling(kpts1,kpts2,matches);
 
-    homography(src_sample, dst_sample);
+    // RANSAC
+    // for loop N=(1-p)/(log(p)~~~ 99%->p=0.99, inlier:outlier=50:50-> s=0.5
+        std::vector<cv::KeyPoint> src_sample, dst_sample;
+        Mat T1, T2;
+        Mat invT2 = Mat::zeros(3,3,CV_32F);
+        std::tie(src_sample, dst_sample) = sampling(kpts1,kpts2,matches);
+
+        std::tie(src_sample, dst_sample, T1, T2) = conditioning(src_sample, dst_sample);
+
+        Mat H = homography(src_sample, dst_sample);
+        // De-normalize
+        std::cout<<"H prime=\n"<<H<<std::endl;
+        H = T2.inv()*H;
+        H = H*T1;
+        H /=H.at<float>(2,2);
+        std::cout<<T1<<std::endl;
+        std::cout<<T2<<std::endl;
+        std::cout<<"H=\n"<<H<<std::endl;
+
+        Mat im_res;
+        warpPerspective(src1, im_res, H, Size(640,480));
+        
+        showResult(src2, im_res);
+
+
+
+        // model -> score (function)
+        //
+        // max score model store
+        // iteration
+    
+    // nonlinear optimization (YET)
 
 
 
 
     //std::cout<<"-----------"<<std::endl;
-    //std::cout<<matches[i].imgIdx<<std::endl; // Don't care
+    //std::cout<<matches[i].imgIdx<<std::endl; // Don't care 2장 비교시 필요없음 
     //std::cout<<matches[i].queryIdx<<std::endl; // src1 kpt index
     //std::cout<<matches[i].trainIdx<<std::endl; // src2 kpt index
     //std::cout<<matches[i].distance<<std::endl; // matching cost(low value is better)
 }
 
-void FramePair::homography(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2)
+Mat FramePair::homography(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2)
 {
     assert(kpts1.size() == kpts2.size());
     assert(kpts1.size() !=0 );
+    //conditioning
 
     Mat A = Mat::zeros(kpts1.size()*2, 9, CV_32F);
     float *data = (float*)A.data;
@@ -92,8 +135,15 @@ void FramePair::homography(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyP
     Mat VT;
     cv::SVD svd(A, cv::SVD::FULL_UV);
     Mat H = svd.vt.row(svd.vt.rows-1);
+    // H prime
     H = H.reshape(3,3);
-    std::cout<<H<<std::endl;
+    Mat res = Mat::zeros(3,3,CV_32FC1);
+    for(int i=0;i<3;i++)
+        for(int j=0; j<3;j++)
+            res.at<float>(i,j)=H.at<float>(i,j);
+
+
+    return res;
 }
 
 std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> FramePair::sampling(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches)
@@ -101,9 +151,9 @@ std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> FramePair::samp
     // Make Random quatro indice
     int tmp_idx = -1;
     std::array<int,4> tmp_indice = {-1, -1, -1, -1};
-    bool flg_tmp = false;
-    int idx_stack=0;
-    bool flg_comp = false;
+    bool flg_tmp = false; //단일 인덱스 중복도 검사
+    int idx_stack=0; // tmp_indice index
+    bool flg_comp = false; // model index 중복도 검사
     while(true)
     {
         tmp_idx = std::rand()%matches.size();
@@ -161,12 +211,16 @@ std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> FramePair::samp
     
     return {key1, key2};
 }
-std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> conditioning(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint>kpts2)
+std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>, Mat, Mat> FramePair::conditioning(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint>kpts2)
 {
     Mat T1 = Mat::zeros(3,3,CV_32F);
     Mat T2 = Mat::zeros(3,3,CV_32F);
     Point2f center1(0,0);
     Point2f center2(0,0);
+    float distance1 = 0.0f;
+    float distance2 = 0.0f;
+
+    // (i) The points are translated so that their centroid is at the origin
     for(int i=0; i<kpts1.size(); i++)
     {
         center1 +=kpts1[i].pt;
@@ -179,5 +233,82 @@ std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> conditioning(st
 
     T2.at<float>(0,2)=-center2.x;
     T2.at<float>(1,2)=-center2.y;
+
+    // (ii) average distance is equal to sqrt(2)
+    for(int i=0; i<kpts1.size();i++)
+    {
+        kpts1[i].pt = kpts1[i].pt - center1;
+        kpts2[i].pt = kpts2[i].pt - center2;
+        distance1 += cv::sqrt(cv::pow(kpts1[i].pt.x,2.0) + cv::pow(kpts1[i].pt.y,2.0));
+        distance2 += cv::sqrt(cv::pow(kpts2[i].pt.x,2.0) + cv::pow(kpts2[i].pt.y,2.0));
+    }
+    distance1 /= float(kpts1.size());
+    distance1 *=cv::sqrt(2); 
+    distance2 /= float(kpts2.size());
+    distance2 *=cv::sqrt(2); 
+    for(int i=0; i<kpts1.size();i++)
+    {
+        kpts1[i].pt /= distance1;
+        kpts2[i].pt /= distance2;
+    }
+    T1.at<float>(0,0) = 1.0f/distance1;
+    T1.at<float>(1,1) = 1.0f/distance1;
+    T1.at<float>(2,2) = 1.0f;
+
+    T2.at<float>(0,0) = 1.0f/distance2;
+    T2.at<float>(1,1) = 1.0f/distance2;
+    T2.at<float>(2,2) = 1.0f;
+
+    return {kpts1, kpts2, T1, T2};
+
+    
+}
+bool FramePair::test_collinear(std::vector<cv::KeyPoint> kpts1, float  eps=0.5f)
+{
+    assert(kpts1.size() == 4);
+    assert(kpts2.size() == 4);
+    std::list<int>::iterator iter;
+    for(int i=0; i<3; i++)
+    {
+        std::list lt(0,4);
+        for(int j=i+1; j<4; j++)
+        {
+            Point2f u = kpts1[i].pt;
+            Point2f v = kpts1[j].pt;
+            Point3f l = point2line(u,v);
+            lt.remove(i);
+            lt.remove(j);
+            for(iter=lt.begin();iter != lt.end(); ++iter)
+            {
+                float d = dist(kpts1[*iter].pt,l);
+                if(d<eps) return false;
+            }
+        }
+    }
+
+    return true;
+
+}
+cv::Point3f FramePair::point2line(Point2f u,Point2f v)
+{
+    float x1 = u.x;
+    float y1 = u.y;
+    float x2 = v.x;
+    float y2 = v.y;
+
+    return Point3f(y1-y2, x2-x1, x1*y2-y1*x2);
+}
+
+float FramePair::dist(Point2f x, Point3f l)
+{
+    float x1 = x.x;
+    float y1 = x.y;
+    float a = l.x;
+    float b = l.y;
+    float c = l.z;
+    float nom = a*x1+b*y1+c;
+    float den = cv::sqrt(a*a+b*b);
+
+    return nom/den;
 }
 }

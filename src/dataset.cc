@@ -37,7 +37,9 @@ Dataset::Dataset(char* _base, char* _scene):base(_base), scene(_scene)
     }
     while (iter != fs::end(iter))
     {
-    const fs::directory_entry& entry = *iter; filenames.push_back(entry.path()); ++iter;
+    const fs::directory_entry& entry = *iter; 
+    filenames.push_back(entry.path()); 
+    ++iter;
     }
     std::sort(filenames.begin(), filenames.end());
     bValid = &flag_valid;

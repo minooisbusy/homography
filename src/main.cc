@@ -6,15 +6,10 @@
 
 int main(int argc, char* argv[])
 {
-    DATASET::Dataset ds(argv[1],argv[2]);
+    DATASET::Dataset ds(argv[1],argv[2]); // load data
     FRAME::FramePair fp(ds.next(),ds.next());
 
-    fp.showPairs();
+    //fp.showPairs();
     fp.compute();
-    std::cout<<"Hello world"<<std::endl;
-
-
-    
-
     return 0;
 }

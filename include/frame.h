@@ -30,12 +30,15 @@ FramePair(std::string, std::string);
 std::tuple<Mat, Mat> get();
 
 void showPairs();
+void showResult(Mat, Mat);
 void compute();
 void ransac(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>, std::vector<cv::DMatch>);
-void homography(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>);
+Mat homography(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>);
 std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> sampling(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>, std::vector<cv::DMatch>);
-std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> conditioning(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>);
-
+std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>, Mat, Mat> conditioning(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>);
+bool test_collinear(std::vector<cv::KeyPoint>, float);
+cv::Point3f point2line(Point2f,Point2f);
+float dist(Point2f, Point3f);
 
 };
 }
