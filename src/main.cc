@@ -6,6 +6,7 @@
 
 int main(int argc, char* argv[])
 {
+    std::srand(0);
     DATASET::Dataset ds(argv[1],argv[2]); // load data
     FRAME::FramePair fp(ds.next(),ds.next());
 
