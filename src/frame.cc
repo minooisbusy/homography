@@ -22,11 +22,14 @@ void FramePair::showPairs()
     waitKey(0);
 }
 
+//inliear theshold!!
+//inliear의 인덱스 가져가야함 나중에 인라이어 전체로 호모그래피 다시 구함
 void FramePair::showResult(Mat src, Mat tgt)
 {
     Mat bgr[3]={Mat::zeros(480,640, CV_8UC1)};
-    bgr[0] = src.clone();
-    bgr[1] = Mat::zeros(480,640, CV_8UC1);
+    bgr[1] = src.clone();
+    bgr[0] = src.clone();;
+    //bgr[0] = Mat::zeros(480,640, CV_8UC1);
     bgr[2] = tgt.clone();
     Mat mg=Mat::zeros(640,480,CV_8UC3);;
     cv::merge(bgr,3, mg);
@@ -50,19 +53,42 @@ void FramePair::compute()
     detector->detectAndCompute(src2,cv::noArray(),kpts2, dscpt2);
     matcher->match(dscpt1,dscpt2,matches);
 
+    std::sort(matches.begin(), matches.end()); // descending ditance
+
+    std::vector<DMatch> good_matches;
+    double minDist = matches.front().distance;
+    double maxDist = matches.back().distance;
+
+    const int ptsPairs = cv::min(50, (int)(matches.size() *0.15));
+
+    for(int i=0;i<ptsPairs;i++)
+    {
+        good_matches.push_back(matches[i]);
+    }
+
+
     Mat model;
     float score;
     
-    std::cout<<"ran st"<<std::endl;
-    std::tie(model,score) = ransac(kpts1,kpts2,matches);
-    std::cout<<"ran en"<<std::endl;
+    // RANSAC
+    std::tie(model,score) = ransac(kpts1,kpts2,good_matches,0.5f, 0.99, 4, 0.5f);
+    //
+    model /= model.at<float>(2,2);
+    cv::SVD svd(model, cv::SVD::NO_UV);
+    Mat d = svd.w;
+    std::cout<<"condition # = "<<d.at<float>(0,0)/d.at<float>(2,2)<<std::endl;
+    std::cout<<"singular value = "<<d<<std::endl;
+    std::cout<<"score = "<<score<<std::endl;
+
+    //Visualization
     Mat im_res;
     warpPerspective(src1, im_res, model, Size(640,480));
     
+    Mat im_feature;
+    cv::drawMatches(this->src1, kpts1, src2, kpts2, good_matches, im_feature, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+    imshow("feature", im_feature);
     showResult(src2, im_res);
 
-
-    // RANSAC
     
     // nonlinear optimization (YET)
 
@@ -127,7 +153,12 @@ Mat FramePair::homography(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPo
     return res;
 }
 
-std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> FramePair::sampling(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches)
+void debg(int i)
+{
+    std::cout<<"debug at "<<i<<std::endl;
+}
+
+std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> FramePair::sampling(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, int n_sample)
 {
     // Make Random quatro indice
     int tmp_idx = -1;
@@ -141,46 +172,45 @@ std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> FramePair::samp
     while(true)
     {
 
-        tmp_idx = std::rand()%matches.size();
-        //std::cout<<"tmp index = "<<tmp_idx<<std::endl;
+        tmp_idx = (double)std::rand()/RAND_MAX*matches.size(); // make random number
 
-        for(int i=0; i<4; i++)
+        for(int i=0; i<n_sample; i++)
         {
-            if(tmp_indice[i] == tmp_idx)
+            if(tmp_indice[i] == tmp_idx && tmp_indice[i] != -1)
             {
-                flg_tmp = true;
+                flg_tmp = true; // temporary indice is redandunt to tmp_indice
                 break; // for loop break;
             }
         }
-
-        if(flg_tmp == false)
+        
+        if(flg_tmp == true)
+        {
+            flg_tmp = false;
+            continue;
+        }
+        else
         {
             tmp_indice[idx_stack] = tmp_idx;
             idx_stack++;
-        }        
-        flg_tmp = false;
+        }
         
-        if(idx_stack>3) // End condition
+        if(idx_stack>3) // End condition: Stacked four indice.
         {
             // compare stacked indices
             flg_comp = false; // if true, then indice is redundant.
-            std::sort(tmp_indice.begin(), tmp_indice.end());
+            std::sort(tmp_indice.begin(), tmp_indice.end()); // from zero to ascending?
             // compare with specific indice with tmp_indice
             for(int i=0; i< indice.size();i++)
             {
                 std::sort(indice[i].begin(), indice[i].end());
-                for(int j=0; j<4;j++)
+                if(tmp_indice == indice[i])
                 {
-                    if(tmp_indice[j] == indice[i][j])
-                    {
-                        flg_comp = true;
-                        break;
-                    }
-                }
-            
-                if(flg_comp == true)
+                    flg_comp = true;
                     break;
+                }
             }
+            
+            
             for(int i=0; i<4; i++)
             {
                 int src_idx = matches[tmp_indice[i]].queryIdx;
@@ -189,13 +219,15 @@ std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> FramePair::samp
                 key2.push_back(kpts2[dst_idx]);
             }
 
-            if(!(test_collinear(key1)&&test_collinear(key2)))
+            if(!(test_collinear(key1)&&test_collinear(key2)) || flg_comp == true)
             {
-                std::cout<<"collinear sample.. resampling.."<<std::endl;
+                //std::cout<<"collinear sample.. resampling.."<<std::endl;
                 key1.erase(key1.begin(), key1.end());
                 key2.erase(key2.begin(), key2.end());
                 tmp_indice = {-1, -1, -1, -1};
-                flg_comp=true;
+                idx_stack = 0;
+                flg_comp=false;
+                continue;
             }
             if(flg_comp == false)
                 break; // while loop break;
@@ -346,7 +378,7 @@ float FramePair::dist(Point2f x, Point3f l)
     return nom/den;
 }
 
-std::tuple<float, std::vector<int>> FramePair::concensus(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, Mat H, float eps)
+std::tuple<float, std::vector<int>> FramePair::concensus(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, Mat H, Mat invH, float eps)
 {
     float confidence=0;
     std::vector<int> indice_inlier;
@@ -359,7 +391,9 @@ std::tuple<float, std::vector<int>> FramePair::concensus(std::vector<cv::KeyPoin
         Point2f est = Transformation(H, src);
 
         float conf = pointNorm(tgt-est);
-        confidence += conf;
+//        Point2f est_ = Transformation(invH, tgt);
+//        float conf_ = pointNorm(src-est_);
+        confidence += conf;//+conf_;
         if(conf<eps)
             indice_inlier.push_back(i);
     }
@@ -393,24 +427,31 @@ std::tuple<Mat, float> FramePair::ransac(std::vector<cv::KeyPoint> kpts1, std::v
     Mat invT2 = Mat::zeros(3,3,CV_32F);
 
     std::vector<int> indice_inlier, temp_indice_inlier;
+    std::cout<<"N = "<<N<<std::endl;
     for(int i=0; i<N; i++)
     {
         temp_conf = 0;
-        std::cout<<"sam st"<<std::endl;
-        std::tie(src_sample, dst_sample) = sampling(kpts1,kpts2,matches);
-        std::cout<<"sam en"<<std::endl;
+        std::tie(src_sample, dst_sample) = sampling(kpts1,kpts2,matches, 4);
 
         std::tie(src_sample, dst_sample, T1, T2) = conditioning(src_sample, dst_sample);
 
         Mat H = homography(src_sample, dst_sample);
+        Mat invH = homography(dst_sample, src_sample);
+
         // De-normalize
-        //std::cout<<"H prime=\n"<<H<<std::endl;
         H = T2.inv()*H;
         H = H*T1;
-        std::tie(temp_conf, temp_indice_inlier) = concensus(kpts1,kpts2, matches, H, min);
+        invH = T1.inv()*H*T2;
+//        if(!test_homography(H))
+//        {
+//            --i;
+//            continue;
+//        }
+        std::tie(temp_conf, temp_indice_inlier) = concensus(kpts1,kpts2, matches, H,invH, min);
 
         if(temp_conf<confidence)
         {
+            std::cout<<"model update! score = "<<confidence<<std::endl;
             confidence = temp_conf;
             indice_inlier = temp_indice_inlier;
             model = H;
@@ -428,5 +469,26 @@ std::tuple<Mat, float> FramePair::ransac(std::vector<cv::KeyPoint> kpts1, std::v
     //
     // max score model store
     // iteration
+}
+bool FramePair::test_homography(Mat H)
+{
+    
+    H /= H.at<float>(2,2);
+    cv::SVD svd(H, cv::SVD::FULL_UV);
+    Mat d = svd.w;
+    if(d.at<float>(0,0)/d.at<float>(2,2) >100)
+        return false;
+    std::cout<<"condition number = "<<d.at<float>(0,0)/d.at<float>(2,2)<<std::endl;
+    float* data = (float*)H.data;
+
+    float D = data[0]*data[4]-data[1]*data[3];
+    float sx = cv::sqrt(data[0]*data[0]+data[3]*data[3]);
+    float sy = cv::sqrt(data[1]*data[1]+data[5]*data[5]);
+    float P = cv::sqrt(data[6]*data[6]+data[7]*data[7]);
+    if(D<=0 || sx>4 || sy<0.1f || sy>4 || P>0.002)
+        return false;
+    else 
+        return true;
+
 }
 }
