@@ -34,8 +34,8 @@ void FramePair::showResult(Mat src, Mat tgt)
     Mat mg=Mat::zeros(640,480,CV_8UC3);;
     cv::merge(bgr,3, mg);
     imshow("warped image residual", mg);
-    imshow("original", bgr[0]);
-    imshow("warpped", bgr[2]);
+    //imshow("original", bgr[0]);
+    //imshow("warpped", bgr[2]);
     waitKey(0);
 }
 
@@ -59,7 +59,7 @@ void FramePair::compute()
     double minDist = matches.front().distance;
     double maxDist = matches.back().distance;
 
-    const int ptsPairs = cv::min(100, (int)(matches.size() *0.15));
+    const int ptsPairs = cv::max(100, (int)(matches.size() *0.20));
 
     for(int i=0;i<ptsPairs;i++)
     {
@@ -69,6 +69,7 @@ void FramePair::compute()
 
     Mat model;
     float score;
+    std::cout<<"# of good matches= "<<ptsPairs<<std::endl;
     
     // RANSAC
     std::tie(model,score) = ransac(kpts1,kpts2,good_matches,1.0f, 0.99, 4, 0.5f);
@@ -88,6 +89,7 @@ void FramePair::compute()
     Mat im_feature;
     cv::drawMatches(this->src1, kpts1, src2, kpts2, good_matches, im_feature, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
     imshow("feature", im_feature);
+
     showResult(src2, im_res);
 
     
