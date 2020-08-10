@@ -8,9 +8,11 @@ FramePair::FramePair(std::string arg1, std::string arg2)
     this->src2 = imread(arg2, cv::IMREAD_GRAYSCALE);
     assert(src1.data != NULL);
     assert(src1.data != NULL);
-    resize(src1, src1, Size(640, 480));
-    resize(src2, src2, Size(640, 480));
+//    resize(src1, src1, Size(int(src1.cols/4), int(src1.rows/4)));
+//    resize(src2, src2, Size(int(src1.cols/4), int(src2.rows/4)));
 
+    resize(src1, src1, Size(480,640)); 
+    resize(src2, src2, Size(480,640));
 }
 
 void FramePair::showPairs()
@@ -31,7 +33,7 @@ void FramePair::showResult(Mat src, Mat tgt)
     bgr[0] = src.clone();;
     //bgr[0] = Mat::zeros(480,640, CV_8UC1);
     bgr[2] = tgt.clone();
-    Mat mg=Mat::zeros(640,480,CV_8UC3);;
+    Mat mg=Mat::zeros(src.cols,src.rows,CV_8UC3);;
     cv::merge(bgr,3, mg);
     imshow("warped image residual", mg);
     //imshow("original", bgr[0]);
@@ -59,7 +61,7 @@ void FramePair::compute()
     double minDist = matches.front().distance;
     double maxDist = matches.back().distance;
 
-    const int ptsPairs = cv::max(100, (int)(matches.size() *0.20));
+    const int ptsPairs = cv::min(500, (int)(matches.size() *0.20));
 
     for(int i=0;i<ptsPairs;i++)
     {
@@ -84,7 +86,7 @@ void FramePair::compute()
 
     //Visualization
     Mat im_res;
-    warpPerspective(src1, im_res, model, Size(640,480));
+    warpPerspective(src1, im_res, model, Size(src1.cols,src1.rows));
     
     Mat im_feature;
     cv::drawMatches(this->src1, kpts1, src2, kpts2, good_matches, im_feature, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
@@ -94,9 +96,6 @@ void FramePair::compute()
 
     
     // nonlinear optimization (YET)
-
-
-
 
     //std::cout<<"-----------"<<std::endl;
     //std::cout<<matches[i].imgIdx<<std::endl; // Don't care 2장 비교시 필요없음 
