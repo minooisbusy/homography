@@ -59,7 +59,7 @@ void FramePair::compute()
     double minDist = matches.front().distance;
     double maxDist = matches.back().distance;
 
-    const int ptsPairs = cv::min(50, (int)(matches.size() *0.15));
+    const int ptsPairs = cv::min(100, (int)(matches.size() *0.15));
 
     for(int i=0;i<ptsPairs;i++)
     {
@@ -71,12 +71,13 @@ void FramePair::compute()
     float score;
     
     // RANSAC
-    std::tie(model,score) = ransac(kpts1,kpts2,good_matches,0.5f, 0.99, 4, 0.5f);
+    std::tie(model,score) = ransac(kpts1,kpts2,good_matches,1.0f, 0.99, 4, 0.5f);
+    
     //
     model /= model.at<float>(2,2);
     cv::SVD svd(model, cv::SVD::NO_UV);
     Mat d = svd.w;
-    std::cout<<"condition # = "<<d.at<float>(0,0)/d.at<float>(2,2)<<std::endl;
+    std::cout<<"condition # = "<<d.at<float>(0,0)/d.at<float>(2,0)<<std::endl;
     std::cout<<"singular value = "<<d<<std::endl;
     std::cout<<"score = "<<score<<std::endl;
 
@@ -378,9 +379,9 @@ float FramePair::dist(Point2f x, Point3f l)
     return nom/den;
 }
 
-std::tuple<float, std::vector<int>> FramePair::concensus(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, Mat H, Mat invH, float eps)
+std::tuple<unsigned int, std::vector<int>> FramePair::concensus(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, Mat H, Mat invH, float eps)
 {
-    float confidence=0;
+    unsigned int confidence=0;
     std::vector<int> indice_inlier;
 
     for(int i=0; i<matches.size();i++)
@@ -393,9 +394,11 @@ std::tuple<float, std::vector<int>> FramePair::concensus(std::vector<cv::KeyPoin
         float conf = pointNorm(tgt-est);
 //        Point2f est_ = Transformation(invH, tgt);
 //        float conf_ = pointNorm(src-est_);
-        confidence += conf;//+conf_;
         if(conf<eps)
+	{
+	    confidence+=1;
             indice_inlier.push_back(i);
+	}
     }
 
     return {confidence, indice_inlier};
@@ -420,8 +423,8 @@ std::tuple<Mat, float> FramePair::ransac(std::vector<cv::KeyPoint> kpts1, std::v
 {
     Mat model;
     int N = cv::log(1-p)/cv::log(1-cv::pow((1-eps),s));
-    float confidence = std::numeric_limits<float>::max();
-    float temp_conf = 0;
+    unsigned int confidence = 0;
+    unsigned int temp_conf = 0;
     std::vector<cv::KeyPoint> src_sample, dst_sample;
     Mat T1, T2;
     Mat invT2 = Mat::zeros(3,3,CV_32F);
@@ -449,7 +452,7 @@ std::tuple<Mat, float> FramePair::ransac(std::vector<cv::KeyPoint> kpts1, std::v
 //        }
         std::tie(temp_conf, temp_indice_inlier) = concensus(kpts1,kpts2, matches, H,invH, min);
 
-        if(temp_conf<confidence)
+        if(temp_conf>confidence)
         {
             std::cout<<"model update! score = "<<confidence<<std::endl;
             confidence = temp_conf;
@@ -457,6 +460,27 @@ std::tuple<Mat, float> FramePair::ransac(std::vector<cv::KeyPoint> kpts1, std::v
             model = H;
         }
     }
+    src_sample.erase(src_sample.begin(), src_sample.end());
+    dst_sample.erase(dst_sample.begin(), dst_sample.end());
+    std::cout<<"# of inliears = "<<indice_inlier.size()<<std::endl;
+    for(int i=0; i<indice_inlier.size();i++)
+    {
+	int src_idx = matches[indice_inlier[i]].queryIdx;
+	int dst_idx = matches[indice_inlier[i]].trainIdx;
+	src_sample.push_back(kpts1[src_idx]);
+	dst_sample.push_back(kpts2[dst_idx]);
+    }
+
+    std::tie(src_sample, dst_sample, T1, T2) = conditioning(src_sample, dst_sample);
+
+    Mat H = homography(src_sample, dst_sample);
+
+    // De-normalize
+    H = T2.inv()*H;
+    model = H*T1;
+
+
+    //Mat H = 
 
     return {model, confidence};
     
