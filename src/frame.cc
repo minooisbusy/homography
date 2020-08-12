@@ -8,11 +8,11 @@ FramePair::FramePair(std::string arg1, std::string arg2)
     this->src2 = imread(arg2, cv::IMREAD_GRAYSCALE);
     assert(src1.data != NULL);
     assert(src1.data != NULL);
-//    resize(src1, src1, Size(int(src1.cols/4), int(src1.rows/4)));
-//    resize(src2, src2, Size(int(src1.cols/4), int(src2.rows/4)));
+    resize(src1, src1, Size(int(src1.rows/4), int(src1.cols/4)));
+    resize(src2, src2, Size(int(src2.rows/4), int(src2.cols/4)));
 
-    resize(src1, src1, Size(480,640)); 
-    resize(src2, src2, Size(480,640));
+//    resize(src1, src1, Size(480,640)); 
+//    resize(src2, src2, Size(480,640));
 }
 
 void FramePair::showPairs()
@@ -26,18 +26,18 @@ void FramePair::showPairs()
 
 //inliear theshold!!
 //inliear의 인덱스 가져가야함 나중에 인라이어 전체로 호모그래피 다시 구함
-void FramePair::showResult(Mat src, Mat tgt)
+void FramePair::showResult(Mat src, Mat tgt,std::string winname)
 {
-    Mat bgr[3]={Mat::zeros(480,640, CV_8UC1)};
+    Mat bgr[3]={Mat::zeros(src.rows,src.cols, CV_8UC1)};
     bgr[1] = src.clone();
     bgr[0] = src.clone();;
     //bgr[0] = Mat::zeros(480,640, CV_8UC1);
     bgr[2] = tgt.clone();
-    Mat mg=Mat::zeros(src.cols,src.rows,CV_8UC3);;
-    cv::merge(bgr,3, mg);
-    imshow("warped image residual", mg);
     //imshow("original", bgr[0]);
     //imshow("warpped", bgr[2]);
+    Mat mg=Mat::zeros(src.cols,src.rows,CV_8UC3);;
+    cv::merge(bgr,3, mg);
+    imshow(winname, mg);
     waitKey(0);
 }
 
@@ -58,10 +58,8 @@ void FramePair::compute()
     std::sort(matches.begin(), matches.end()); // descending ditance
 
     std::vector<DMatch> good_matches;
-    double minDist = matches.front().distance;
-    double maxDist = matches.back().distance;
 
-    const int ptsPairs = cv::min(500, (int)(matches.size() *0.20));
+    const int ptsPairs = cv::min(1000, (int)(matches.size() *0.20));
 
     for(int i=0;i<ptsPairs;i++)
     {
@@ -74,10 +72,23 @@ void FramePair::compute()
     std::cout<<"# of good matches= "<<ptsPairs<<std::endl;
     
     // RANSAC
-    std::tie(model,score) = ransac(kpts1,kpts2,good_matches,1.0f, 0.99, 4, 0.5f);
+    std::vector<DMatch> inliers;
+    std::tie(model,score, inliers) = ransac(kpts1,kpts2,matches,1.0f, 0.99, 4, 0.5f);
+
+    // For libraries
+    std::vector<Point2f> obj;
+    std::vector<Point2f> scene;
+    Mat im_res,im_lib;
+    for(int i=0; i<matches.size();i++)
+    {
+        obj.push_back(kpts1[matches[i].queryIdx].pt);
+        scene.push_back(kpts2[matches[i].trainIdx].pt);
+    }
+    Mat libH = cv::findHomography(obj,scene,RANSAC);
     
-    //
-    model /= model.at<float>(2,2);
+    if(score>4)
+    { 
+    model /= norm_matrix(model);
     cv::SVD svd(model, cv::SVD::NO_UV);
     Mat d = svd.w;
     std::cout<<"condition # = "<<d.at<float>(0,0)/d.at<float>(2,0)<<std::endl;
@@ -85,14 +96,21 @@ void FramePair::compute()
     std::cout<<"score = "<<score<<std::endl;
 
     //Visualization
-    Mat im_res;
     warpPerspective(src1, im_res, model, Size(src1.cols,src1.rows));
+    warpPerspective(src1, im_lib, libH, Size(src1.cols,src1.rows));
     
     Mat im_feature;
-    cv::drawMatches(this->src1, kpts1, src2, kpts2, good_matches, im_feature, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+    cv::drawMatches(this->src1, kpts1, src2, kpts2, inliers, im_feature, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
     imshow("feature", im_feature);
 
-    showResult(src2, im_res);
+    showResult(src2, im_lib, "lib");
+    }
+    else
+    {
+        std::cout<<"estimation failed"<<std::endl;
+        std::cout<<model<<std::endl;
+    }
+    showResult(src2, im_res, "skeretch");
 
     
     // nonlinear optimization (YET)
@@ -391,10 +409,10 @@ std::tuple<unsigned int, std::vector<int>> FramePair::concensus(std::vector<cv::
         Point2f tgt =kpts2[matches[i].trainIdx].pt;
 
         Point2f est = Transformation(H, src);
+        Point2f est_ = Transformation(invH, tgt);
 
         float conf = pointNorm(tgt-est);
-//        Point2f est_ = Transformation(invH, tgt);
-//        float conf_ = pointNorm(src-est_);
+        float conf_ = pointNorm(src-est_);
         if(conf<eps)
 	{
 	    confidence+=1;
@@ -420,15 +438,17 @@ float FramePair::pointNorm(Point2f x)
     return cv::sqrt(x.x*x.x+x.y*x.y);
 
 }
-std::tuple<Mat, float> FramePair::ransac(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, float min, float p, float s,float eps)
+std::tuple<Mat, float, std::vector<DMatch>> FramePair::ransac(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, float min, float p, float s,float eps)
 {
     Mat model;
     int N = cv::log(1-p)/cv::log(1-cv::pow((1-eps),s));
+    N = cv::max(N, 200);
     unsigned int confidence = 0;
     unsigned int temp_conf = 0;
     std::vector<cv::KeyPoint> src_sample, dst_sample;
     Mat T1, T2;
     Mat invT2 = Mat::zeros(3,3,CV_32F);
+    std::vector<DMatch> inlier_stack;
 
     std::vector<int> indice_inlier, temp_indice_inlier;
     std::cout<<"N = "<<N<<std::endl;
@@ -470,6 +490,7 @@ std::tuple<Mat, float> FramePair::ransac(std::vector<cv::KeyPoint> kpts1, std::v
 	int dst_idx = matches[indice_inlier[i]].trainIdx;
 	src_sample.push_back(kpts1[src_idx]);
 	dst_sample.push_back(kpts2[dst_idx]);
+    inlier_stack.push_back(matches[indice_inlier[i]]);
     }
 
     std::tie(src_sample, dst_sample, T1, T2) = conditioning(src_sample, dst_sample);
@@ -483,7 +504,7 @@ std::tuple<Mat, float> FramePair::ransac(std::vector<cv::KeyPoint> kpts1, std::v
 
     //Mat H = 
 
-    return {model, confidence};
+    return {model, confidence,inlier_stack};
     
 
 
@@ -515,5 +536,15 @@ bool FramePair::test_homography(Mat H)
     else 
         return true;
 
+}
+float FramePair::norm_matrix(Mat a)
+{
+    float* data = (float*)a.data;
+    float res=0;
+    for(int i=0; i<a.cols*a.rows;i++)
+        res+=data[i]*data[i];
+    res = cv::sqrt(res);
+
+    return res;
 }
 }

@@ -30,7 +30,7 @@ FramePair(std::string, std::string);
 std::tuple<Mat, Mat> get();
 
 void showPairs();
-void showResult(Mat, Mat);
+void showResult(Mat, Mat, std::string);
 void compute();
 Mat homography(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>);
 std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>> sampling(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>, std::vector<cv::DMatch>, int n_sample=4);
@@ -41,8 +41,9 @@ float dist(Point2f, Point3f);
 std::tuple<unsigned int, std::vector<int>> concensus(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, Mat H, Mat invH, float eps=0.5f);
 Point2f Transformation(Mat, Point2f);
 float pointNorm(Point2f);
-std::tuple<Mat, float> ransac(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, float min=0.5f, float p=0.99, float s=4,float eps=0.5f);
+std::tuple<Mat, float, std::vector<DMatch>> ransac(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, float min=0.5f, float p=0.99, float s=4,float eps=0.5f);
 bool test_homography(Mat H);
+float norm_matrix(Mat a);
 };
 }
 
