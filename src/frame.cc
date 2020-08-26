@@ -91,9 +91,11 @@ void FramePair::compute()
     model /= norm_matrix(model);
     cv::SVD svd(model, cv::SVD::NO_UV);
     Mat d = svd.w;
-    std::cout<<"condition # = "<<d.at<float>(0,0)/d.at<float>(2,0)<<std::endl;
+    std::cout<<"condition # = "<<d.at<float>(0,0)/d.at<float>(1,0)<<std::endl;
     std::cout<<"singular value = "<<d<<std::endl;
     std::cout<<"score = "<<score<<std::endl;
+    cv::InputArray a(obj);
+    a.getMat();
 
     //Visualization
     warpPerspective(src1, im_res, model, Size(src1.cols,src1.rows));
@@ -265,33 +267,34 @@ std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>, Mat, Mat> Frame
     Mat S1 = Mat::eye(3,3,CV_32F);
     Mat S2 = Mat::eye(3,3,CV_32F);
 
-    Point2f center1(0,0);
-    Point2f center2(0,0);
+    Point2f cm1(0,0);
+    Point2f cm2(0,0);
     float distance1 = 0.0f;
     float distance2 = 0.0f;
 
     // (i) The points are translated so that their centroid is at the origin
     for(int i=0; i<kpts1.size(); i++)
     {
-        center1 +=kpts1[i].pt;
-        center2 +=kpts2[i].pt;
+        cm1 +=kpts1[i].pt;
+        cm2 +=kpts2[i].pt;
     }
-    center1 /=(float)kpts1.size();
-    center2 /=(float)kpts2.size();
-    T1.at<float>(0,2)=-center1.x;
-    T1.at<float>(1,2)=-center1.y;
+    cm1 /=(float)kpts1.size();
+    cm2 /=(float)kpts2.size();
+    T1.at<float>(0,2)=-cm1.x;
+    T1.at<float>(1,2)=-cm1.y;
 
-    T2.at<float>(0,2)=-center2.x;
-    T2.at<float>(1,2)=-center2.y;
+    T2.at<float>(0,2)=-cm2.x;
+    T2.at<float>(1,2)=-cm2.y;
 
     // (ii) average distance is equal to sqrt(2)
     for(int i=0; i<kpts1.size();i++)
     {
-        kpts1[i].pt = kpts1[i].pt - center1;
-        kpts2[i].pt = kpts2[i].pt - center2;
+        kpts1[i].pt = kpts1[i].pt - cm1;
+        kpts2[i].pt = kpts2[i].pt - cm2;
         distance1 += cv::sqrt(cv::pow(kpts1[i].pt.x,2.0) + cv::pow(kpts1[i].pt.y,2.0));
         distance2 += cv::sqrt(cv::pow(kpts2[i].pt.x,2.0) + cv::pow(kpts2[i].pt.y,2.0));
     }
+
     distance1 /= float(kpts1.size());
     distance1 *=cv::sqrt(2); 
     distance2 /= float(kpts2.size());
