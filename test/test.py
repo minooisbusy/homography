@@ -3,32 +3,43 @@ import numpy as np
 def cm(data):
     cx = 0 
     cy = 0
+    result = np.zeros(data.shape)
     N = len(data)
     for i in range(0, N):
         cx += data[i][0]
         cy += data[i][1]
 
-    data[:][0]-=cx/N
-    data[:][1]-=cy/N
+    cx /=N
+    cy /=N
+    print(cx)
+    print(cy)
+    for i in range(0, N):
+        result[i][0]=data[i][0]-cx
+        result[i][1]=data[i][1]-cy
 
-    return cx/N,cy/N, data
+    return cx,cy, result
 
 def scaling(data):
     sx = 0
     sy = 0
+    result = np.zeros(data.shape)
     N = len(data)
 
     for i in range(0, N):
         sx += abs(data[i][0])
         sy += abs(data[i][1])
 
-    data[:][0] /= sx/N
-    data[:][1] /= sy/N
+    sx /= N
+    sy /= N
+    for i in range(0, N):
+        result[i][0]=data[i][0]/sx
+        result[i][1]=data[i][1]/sy
 
-    return sx/N, sy/N, data
+    return sx, sy, result 
 
 def scaling2(data):
     dist = 0
+    result = np.zeros(data.shape)
     N = len(data)
 
     for i in range(0, N):
@@ -43,15 +54,12 @@ data = np.random.randint(0,200,(100,2))
 
 data=data.astype(np.float)
 
-cx, cy, data_cm = cm(data)
-sx, sy, data_no = scaling(data_cm)
+cx, cy, data_cm = cm(data.copy())
 
-sx, sy, data_no2 = scaling(data_cm)
+sx, sy, data_no = scaling(data_cm.copy())
+sx, sy, data_no2 = scaling(data_cm.copy())
 
-print(np.sum(np.abs(data_no-data_no2)))
-
-
-#print(data)
-
-
+#print(data_cm)
+print(np.sum(data_no))
+print(np.sum(data_no2))
 
