@@ -461,6 +461,7 @@ float FramePair::pointNorm(Point2f x)
     return cv::sqrt(x.x*x.x+x.y*x.y);
 
 }
+//TODO: Add output: Inlier Mask to use Non-linear Optimization(LM method)
 std::tuple<Mat, float, std::vector<DMatch>> FramePair::ransac(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, float min, float p, float s,float eps)
 {
     Mat model;
@@ -494,6 +495,7 @@ std::tuple<Mat, float, std::vector<DMatch>> FramePair::ransac(std::vector<cv::Ke
 //            --i;
 //            continue;
 //        }
+        //TODO: Get inliers As Mask
         std::tie(temp_conf, temp_indice_inlier) = concensus(kpts1,kpts2, matches, H,invH, min);
 
         if(temp_conf>confidence)
