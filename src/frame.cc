@@ -272,6 +272,11 @@ std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>, Mat, Mat> Frame
     float distance1 = 0.0f;
     float distance2 = 0.0f;
 
+    float sx1 = 0.0f;
+    float sy1 = 0.0f;
+    float sx2 = 0.0f;
+    float sy2 = 0.0f;
+
     // (i) The points are translated so that their centroid is at the origin
     for(int i=0; i<kpts1.size(); i++)
     {
@@ -289,26 +294,41 @@ std::tuple<std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>, Mat, Mat> Frame
     // (ii) average distance is equal to sqrt(2)
     for(int i=0; i<kpts1.size();i++)
     {
-        kpts1[i].pt = kpts1[i].pt - cm1;
-        kpts2[i].pt = kpts2[i].pt - cm2;
-        distance1 += cv::sqrt(cv::pow(kpts1[i].pt.x,2.0) + cv::pow(kpts1[i].pt.y,2.0));
-        distance2 += cv::sqrt(cv::pow(kpts2[i].pt.x,2.0) + cv::pow(kpts2[i].pt.y,2.0));
+        kpts1[i].pt.x = kpts1[i].pt.x - cm1.x;
+        kpts1[i].pt.y = kpts1[i].pt.y - cm1.y;
+        kpts2[i].pt.x = kpts2[i].pt.x - cm2.x;
+        kpts2[i].pt.y = kpts2[i].pt.y - cm2.y;
+        sx1 += abs(kpts1[i].pt.x);
+        sx2 += abs(kpts2[i].pt.x);
+        sy1 += abs(kpts1[i].pt.y);
+        sy2 += abs(kpts2[i].pt.y);
+        //distance1 += cv::sqrt(cv::pow(kpts1[i].pt.x,2.0) + cv::pow(kpts1[i].pt.y,2.0));
+        //distance2 += cv::sqrt(cv::pow(kpts2[i].pt.x,2.0) + cv::pow(kpts2[i].pt.y,2.0));
     }
 
-    distance1 /= float(kpts1.size());
-    distance1 *=cv::sqrt(2); 
-    distance2 /= float(kpts2.size());
-    distance2 *=cv::sqrt(2); 
+//    distance1 /= float(kpts1.size());
+//    distance1 *=cv::sqrt(2); 
+//    distance2 /= float(kpts2.size());
+//    distance2 *=cv::sqrt(2); 
+
+    sx1 /= float(kpts1.size());
+    sx2 /= float(kpts2.size());
+    sy1 /= float(kpts1.size());
+    sy2 /= float(kpts2.size());
     for(int i=0; i<kpts1.size();i++)
     {
-        kpts1[i].pt /= distance1;
-        kpts2[i].pt /= distance2;
+        kpts1[i].pt.x /= sx1;
+        kpts1[i].pt.y /= sy1;
+        kpts2[i].pt.x /= sx2;
+        kpts2[i].pt.y /= sy2;
+//        kpts1[i].pt.x /= distance1;
+//        kpts2[i].pt /= distance2;
     }
-    S1.at<float>(0,0) = cv::sqrt(2.0f)/distance1;
-    S1.at<float>(1,1) = cv::sqrt(2.0f)/distance1;
+    S1.at<float>(0,0) = cv::sqrt(2.0f)/sx1;
+    S1.at<float>(1,1) = cv::sqrt(2.0f)/sy1;
 
-    S2.at<float>(0,0) = cv::sqrt(2.0f)/distance2;
-    S2.at<float>(1,1) = cv::sqrt(2.0f)/distance2;
+    S2.at<float>(0,0) = cv::sqrt(2.0f)/sx2;
+    S2.at<float>(1,1) = cv::sqrt(2.0f)/sy2;
 
 //  std::cout<<"T1="<<std::endl;
 //  std::cout<<T1<<std::endl;
@@ -487,6 +507,8 @@ std::tuple<Mat, float, std::vector<DMatch>> FramePair::ransac(std::vector<cv::Ke
     src_sample.erase(src_sample.begin(), src_sample.end());
     dst_sample.erase(dst_sample.begin(), dst_sample.end());
     std::cout<<"# of inliears = "<<indice_inlier.size()<<std::endl;
+
+    // Over-determined term solution ( Regression )
     for(int i=0; i<indice_inlier.size();i++)
     {
 	int src_idx = matches[indice_inlier[i]].queryIdx;
@@ -505,7 +527,7 @@ std::tuple<Mat, float, std::vector<DMatch>> FramePair::ransac(std::vector<cv::Ke
     model = H*T1;
 
 
-    //Mat H = 
+    //TODO: Make inliears list. It could be Samples mask 0 for outlier , 1 for inlier.
 
     return {model, confidence,inlier_stack};
     
