@@ -73,7 +73,16 @@ void FramePair::compute()
     
     // RANSAC
     std::vector<DMatch> inliers;
-    std::tie(model,score, inliers) = ransac(kpts1,kpts2,matches,1.0f, 0.99, 4, 0.5f);
+    // min: minmum concensus distance
+    // p = probability for accuracy
+    // s = # of samples
+    // eps = ratio of in/outlier
+    double eps = (matches.size()-good_matches.size())/(double)matches.size();
+    std::cout<<"Ratio of In/Outlier = "<<eps<<std::endl;
+    std::tie(model,score, inliers) = ransac(kpts1,kpts2,good_matches,1.0f, 0.99, 4.0, eps);
+    Mat H8(9, 1, CV_64F, model.ptr<double>());
+    std::cout<<"H8=\n"<<model<<std::endl;
+    std::cout<<"H8=\n"<<H8<<std::endl;
 
     // For libraries
     std::vector<Point2f> obj;
@@ -91,11 +100,11 @@ void FramePair::compute()
     model /= norm_matrix(model);
     cv::SVD svd(model, cv::SVD::NO_UV);
     Mat d = svd.w;
+    Mat U = svd.u;
+    Mat vt = svd.vt;
     std::cout<<"condition # = "<<d.at<float>(0,0)/d.at<float>(1,0)<<std::endl;
     std::cout<<"singular value = "<<d<<std::endl;
     std::cout<<"score = "<<score<<std::endl;
-    cv::InputArray a(obj);
-    a.getMat();
 
     //Visualization
     warpPerspective(src1, im_res, model, Size(src1.cols,src1.rows));
@@ -106,13 +115,15 @@ void FramePair::compute()
     imshow("feature", im_feature);
 
     showResult(src2, im_lib, "lib");
+    showResult(src2, im_res, "skeretch");
+
+
     }
     else
     {
         std::cout<<"estimation failed"<<std::endl;
         std::cout<<model<<std::endl;
     }
-    showResult(src2, im_res, "skeretch");
 
     
     // nonlinear optimization (YET)
@@ -465,8 +476,7 @@ float FramePair::pointNorm(Point2f x)
 std::tuple<Mat, float, std::vector<DMatch>> FramePair::ransac(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, float min, float p, float s,float eps)
 {
     Mat model;
-    int N = cv::log(1-p)/cv::log(1-cv::pow((1-eps),s));
-    N = cv::max(N, 200);
+    int N = RANSACUpdateNumIters(p, eps, s, 1000);
     unsigned int confidence = 0;
     unsigned int temp_conf = 0;
     std::vector<cv::KeyPoint> src_sample, dst_sample;
@@ -530,6 +540,9 @@ std::tuple<Mat, float, std::vector<DMatch>> FramePair::ransac(std::vector<cv::Ke
 
 
     //TODO: Make inliears list. It could be Samples mask 0 for outlier , 1 for inlier.
+    std::cout<<"model in ransac=\n"<<model<<std::endl;
+    model.convertTo(model, model.type(), 1./model.at<float>(2,2));
+    std::cout<<"model in ransac=\n"<<model<<std::endl;
 
     return {model, confidence,inlier_stack};
     
@@ -563,6 +576,27 @@ bool FramePair::test_homography(Mat H)
     else 
         return true;
 
+}
+int FramePair::RANSACUpdateNumIters(double p, double ep, int modelPoints, int maxIters)
+{
+    if( modelPoints <= 0 )
+        CV_Error( Error::StsOutOfRange, "the number of model points should be positive" );
+
+    p = MAX(p, 0.);
+    p = MIN(p, 1.);
+    ep = MAX(ep, 0.);
+    ep = MIN(ep, 1.);
+
+    // avoid inf's & nan's
+    double num = MAX(1. - p, DBL_MIN);
+    double denom = 1. - std::pow(1. - ep, modelPoints);
+    if( denom < DBL_MIN )
+        return 0;
+
+    num = std::log(num);
+    denom = std::log(denom);
+
+    return denom >= 0 || -num >= maxIters*(-denom) ? maxIters : cvRound(num/denom);
 }
 float FramePair::norm_matrix(Mat a)
 {

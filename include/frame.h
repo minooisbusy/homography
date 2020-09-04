@@ -44,6 +44,8 @@ float pointNorm(Point2f);
 std::tuple<Mat, float, std::vector<DMatch>> ransac(std::vector<cv::KeyPoint> kpts1, std::vector<cv::KeyPoint> kpts2, std::vector<cv::DMatch> matches, float min=0.5f, float p=0.99, float s=4,float eps=0.5f);
 bool test_homography(Mat H);
 float norm_matrix(Mat a);
+int RANSACUpdateNumIters(double p, double ep, int modelPoints, int maxIters);
+Mat LMSolver(std::vector<cv::KeyPoint>, std::vector<cv::KeyPoint>, std::vector<cv::DMatch>, Mat);
 };
 }
 
