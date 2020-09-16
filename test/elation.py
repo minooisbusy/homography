@@ -4,8 +4,10 @@ from Appendix import *
 
 img = np.zeros((500,500,3), np.uint8)
 
-v = np.array([0,0,1])
-a = np.array([1./250, 1./300,0])
+#v = np.array([0,0,1])
+#a = np.array([1./250, 1./300,0])
+v = np.array([1.,0.,1.])
+a = np.array([0, 1./300,0])
 
 mu=100
 H_p = np.eye(3) +mu*np.outer(v,a)
